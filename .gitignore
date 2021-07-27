@@ -27,4 +27,7 @@ buildNumber.properties
 .project
 .vscode/
 
-
+#
+# Extra Artefacts
+#
+stmik.log
