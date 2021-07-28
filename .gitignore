@@ -31,3 +31,6 @@ buildNumber.properties
 # Extra Artefacts
 #
 stmik.log
+src/main/resources/ctp_TRUSTORE.jks
+src/main/resources/acservice01.p12
+
