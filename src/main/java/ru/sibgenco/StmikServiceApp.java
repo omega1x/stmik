@@ -46,7 +46,7 @@ public final class StmikServiceApp {
         list.put("Connection fail", 3);
         EXIT_CODE = Collections.unmodifiableMap(list);
     }
-
+    private final static String ACQUISITION_QUERY = "{\"kpd\" : \"All\"}";
     /* Class subobjects */
     private final static Logger put = LoggerFactory.getLogger(StmikServiceApp.class);
     private static WebsocketClient Client;
@@ -67,7 +67,7 @@ public final class StmikServiceApp {
         put.info(MessageFormat.format("Ok. Server certificate successfully extracted to <{0}>", SERVER_KEY_FULL_PATH));
         
         /* Initiate web-socket connection: */
-        put.info(MessageFormat.format("Create web-socket client to <{0}:{1}>", STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT));
+        put.info(MessageFormat.format("Create web-socket client to <{0}:{1}>", STMIK_SERVER_ADDRESS, Long.toString(STMIK_SERVER_PORT)));
         /* Client client = new Client(
             STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT, SERVER_KEY_FULL_PATH, SERVER_KEY_PASSWORD, 
             CLIENT_KEY_FILE_NAME_PATH, CLIENT_KEY_PASSWORD
@@ -87,7 +87,7 @@ public final class StmikServiceApp {
             System.exit(EXIT_CODE.get("Client fail"));
         }    
         put.info("Ok. Client is successfully created.");
-        put.info(MessageFormat.format("Connect to <{0}:{1}>", STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT));
+        put.info(MessageFormat.format("Connect to <{0}:{1}>", STMIK_SERVER_ADDRESS, Long.toString(STMIK_SERVER_PORT)));
         Client.addClientSocketEventListener(new ClientEventListenerLogging());
         Client.connect();
         if (!Client.isConnected()) {
@@ -98,24 +98,28 @@ public final class StmikServiceApp {
         put.info(
             MessageFormat.format(
                 "Ok. Successfully connected to <{0}:{1}>",
-                STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT
+                STMIK_SERVER_ADDRESS, Long.toString(STMIK_SERVER_PORT)
             )
         );   
 
-        put.info("Start sending and recieve messages");
-        for (int i = 1; i <= 5; i++){
-            Client.writeMessage("{\"kpd\" : "+ i + "}");
-            try {
-                TimeUnit.SECONDS.sleep(10);
-            } catch (Exception e){ }
-        }
-        put.info("Finish sending and recieve messages");
-        Client.closeSocket();
-        Client.cleanEventListeners();
         put.info(
             MessageFormat.format(
-                "Connection to <{0}:{1}> is closed",
-                STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT
+                "Start sending and recieve messages sending acquisition query <{0}>", 
+                ACQUISITION_QUERY
+            )
+        );
+        Client.writeMessage(ACQUISITION_QUERY);
+        try {
+            TimeUnit.SECONDS.sleep(100);   //TODO: make another termination condition
+        } catch (Exception e){ }  
+
+        put.info("Finish sending and recieve messages");
+        Client.cleanEventListeners();
+        
+        put.info(
+            MessageFormat.format(
+                "Connection to <{0}:{1}> will be closed at programm termination",
+                STMIK_SERVER_ADDRESS, Long.toString(STMIK_SERVER_PORT)
             )
         );   
         put.info(
