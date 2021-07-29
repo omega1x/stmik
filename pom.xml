@@ -56,6 +56,11 @@
       <artifactId>commons-io</artifactId>
       <version>2.11.0</version>
     </dependency>
+    <dependency>
+      <groupId>info.picocli</groupId>
+      <artifactId>picocli</artifactId>
+      <version>4.6.1</version>
+    </dependency>
   </dependencies>
   <build>
     <finalName>stmik</finalName>
@@ -67,6 +72,16 @@
           <version>3.8.0</version>
           <configuration>
             <release>11</release>
+            <annotationProcessorPaths>
+              <path>
+                <groupId>info.picocli</groupId>
+                <artifactId>picocli-codegen</artifactId>
+                <version>4.6.1</version>
+              </path>
+            </annotationProcessorPaths>
+            <compilerArgs>
+              <arg>-Aproject=${project.groupId}/${project.artifactId}</arg>
+            </compilerArgs>
           </configuration>
         </plugin>
         <plugin>

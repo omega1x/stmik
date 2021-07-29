@@ -27,7 +27,9 @@ public class ClientEventListenerLogging implements IWebsocketClientEventListener
     @Override
     public void onIncomingMessageReceived(byte[] data, IWebsocketClientChannel iWebsocketClientChannel) {
         try {
-            System.out.println("Pong: " + new String(data, "UTF-8"));
+            String a = "Pong: " + new String(data, "UTF-8");
+            StmikServiceApp.message_queue.add(1);
+            System.out.println("Messages in queue: " + StmikServiceApp.message_queue.size());
         }
         catch (UnsupportedEncodingException e){
             System.out.println("Pong problem: " + e.getMessage());
