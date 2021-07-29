@@ -1,3 +1,7 @@
+[![CodeFactor](https://www.codefactor.io/repository/github/omega1x/stmik/badge)](https://www.codefactor.io/repository/github/omega1x/stmik)
+
+**STMIK** - Industrial web-socket connector to *BTSK* telemetry service.
+
 # Build
 
 First, download the standalone dependency - *libwebsocket-1.1.jar* - from [release page](https://github.com/omega1x/stmik/releases/tag/0.1.1):

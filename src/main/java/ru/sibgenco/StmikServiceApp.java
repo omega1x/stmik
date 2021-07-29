@@ -66,6 +66,7 @@ class StmikServiceApp implements Callable<Integer> {
     static {
         Map<String, Integer> list = new HashMap<String, Integer>();
         list.put("All done, thanks!", 0);
+        list.put("Unexpected exception", 1);
         list.put("Client fail", 2);
         list.put("Connection fail", 3);
         EXIT_CODE = Collections.unmodifiableMap(list);
@@ -142,7 +143,10 @@ class StmikServiceApp implements Callable<Integer> {
         Client.writeMessage(ACQUISITION_QUERY);
         try {
             TimeUnit.HOURS.sleep(CONNECTION_LIFE_CYCLE);
-        } catch (Exception e){ }
+        } catch (Exception e){
+            put.error("Main thread cannot be put on sleep.");
+            return EXIT_CODE.get("Unexpected exception");
+        }
 
         put.info("Finish sending and recieve messages");
         Client.cleanEventListeners();
