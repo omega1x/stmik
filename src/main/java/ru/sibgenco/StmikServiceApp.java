@@ -25,32 +25,19 @@ import fr.bmartel.protocol.websocket.client.WebsocketClient;
 
 @Command(name = "stmik", mixinStandardHelpOptions = true, version = "stmik 1.0",
          header = "@|bold Connect to|@ @|bold,fg(blue) BTSK|@ @|bold telemetry service through web-socket interface. |@%n", 
-         footer = "%nData are received and transferred for unlimited period until the user will interrupt the process by @|underline,bold Ctrl+C|@.%n")
+         footer = "%nData are received and transferred for unlimited period until the user will interrupt the process by @|underline,bold Ctrl+C|@.%n",
+         exitCodeListHeading = "%nExit Codes:%n",
+         exitCodeList = { // look further at EXIT_CODE field of this class
+             " 0:Successful program execution.",
+             " 1:Usage error: user input for the command was incorrect.",
+             "71:Internal software error: an unexpected exception occurred.",
+             "72:Internal software error: web-socket client cannot be created.",
+             "73:Connection error: service unavailable."
+            }
+         )
 class StmikServiceApp implements Callable<Integer> {
-    private StmikServiceApp() {
-    }
-    @Spec CommandSpec spec; // injected by picocli
-
-    @Option(names = {"-k", "--client-key"}, paramLabel = "FILE", required = true, 
-            description = "PKCS12 file provided by @|fg(blue),bold BTSK|@.")
-    private static String CLIENT_KEY_FILE_NAME_PATH;
     
-    @Option(names = {"-p", "--password"}, paramLabel = "PASSWORD", required = true, 
-            description = "password provided with PKCS12 file.")
-    private static String CLIENT_KEY_PASSWORD;
-
-    private final static int MAX_OBJECT_RESPOND_INTERVAL = 1700;  // [seconds]
-    private final static int MIN_OBJECT_RESPOND_INTERVAL =   60;  // [seconds]
-    private final static int DEF_OBJECT_RESPOND_INTERVAL =  300;  // [seconds]
-    
-    @Option(names = {"-i", "--interval"}, paramLabel = "SECONDS", defaultValue = "" + DEF_OBJECT_RESPOND_INTERVAL, 
-            description = "Object respond interval in seconds. Must be greater than " + 
-            MIN_OBJECT_RESPOND_INTERVAL + " and less then " + MAX_OBJECT_RESPOND_INTERVAL + 
-            ". Default value is " + DEF_OBJECT_RESPOND_INTERVAL + " seconds.")
-    private static int OBJECT_RESPOND_INTERVAL;
-        
-    
-    /* Hard-coded application configuration */
+    /* Embedded  configuration */
     private final static String STMIK_SERVER_ADDRESS = "ctp.stmik.ru";
     private final static int STMIK_SERVER_PORT = 1515;
 
@@ -66,20 +53,36 @@ class StmikServiceApp implements Callable<Integer> {
     static {
         Map<String, Integer> list = new HashMap<String, Integer>();
         list.put("All done, thanks!", 0);
-        list.put("Unexpected exception", 1);
-        list.put("Client fail", 2);
-        list.put("Connection fail", 3);
+        list.put("Unexpected exception", 71);
+        list.put("Client fail", 72);
+        list.put("Connection fail", 73);
         EXIT_CODE = Collections.unmodifiableMap(list);
     }
+    private final static int CONNECTION_LIFE_CYCLE = 175_200;  // [hours], i.e. infinity
+    
+    /* Command line options */
+    @Spec CommandSpec spec; // injected by picocli
+    @Option(names = {"-k", "--client-key"}, paramLabel = "FILE", required = true, 
+            description = "PKCS12 file provided by @|fg(blue),bold BTSK|@.")
+    private static String CLIENT_KEY_FILE_NAME_PATH;
+    @Option(names = {"-p", "--password"}, paramLabel = "PASSWORD", required = true, 
+            description = "password provided with PKCS12 file.")
+    private static String CLIENT_KEY_PASSWORD;
+    private final static int MAX_OBJECT_RESPOND_INTERVAL = 1700;  // [seconds]
+    private final static int MIN_OBJECT_RESPOND_INTERVAL =   60;  // [seconds]
+    private final static int DEF_OBJECT_RESPOND_INTERVAL =  300;  // [seconds]
+    @Option(names = {"-i", "--interval"}, paramLabel = "SECONDS", defaultValue = "" + DEF_OBJECT_RESPOND_INTERVAL, 
+            description = "Object respond interval in seconds. Must be greater than " + 
+            MIN_OBJECT_RESPOND_INTERVAL + " and less then " + MAX_OBJECT_RESPOND_INTERVAL + 
+            ". Default value is " + DEF_OBJECT_RESPOND_INTERVAL + " seconds.")
+    private static int OBJECT_RESPOND_INTERVAL;
     private final static String ACQUISITION_QUERY = "{" + MessageFormat.format(
         "\"kpd\" : \"All\", \"interval\" : {0}", OBJECT_RESPOND_INTERVAL
     ) + "}";
-    private final static int CONNECTION_LIFE_CYCLE = 175_200;  // [hours], i.e. infinity
 
-    /* Class subobjects */
+    /* Exploited objects */
     private final static Logger put = LoggerFactory.getLogger(StmikServiceApp.class);
     private static WebsocketClient Client;
-
     public static ConcurrentLinkedQueue<Integer> message_queue = new ConcurrentLinkedQueue<Integer>();
 
     @Override
