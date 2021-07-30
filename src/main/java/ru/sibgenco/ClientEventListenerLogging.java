@@ -4,33 +4,29 @@ import fr.bmartel.protocol.websocket.client.IWebsocketClientChannel;
 import fr.bmartel.protocol.websocket.client.IWebsocketClientEventListener;
 import java.io.UnsupportedEncodingException;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 //логирующий слушатель клиентов
 public class ClientEventListenerLogging implements IWebsocketClientEventListener {
-
-    // private static final Logger log4 = LogManager.getLogger("ClientListenerLogger");
-
+    private final static Logger put = LoggerFactory.getLogger(ClientEventListenerLogging.class);
     @Override
     public void onSocketConnected() {
-        // log4.info("Клиент подключен");
-        //System.out.println("Клиент подключен");
+       put.info("Connection confirmed");
     }
 
     @Override
     public void onSocketClosed() {
-        // log4.info("Клиент отключен");
-        //System.out.println("Клиент отключен");
+        put.info("Socket close confirmed");
     }
 
     @Override
     public void onIncomingMessageReceived(byte[] data, IWebsocketClientChannel iWebsocketClientChannel) {
         try {
-            String a = "Pong: " + new String(data, "UTF-8");
-            a.isBlank();
-            StmikServiceApp.message_queue.add(1);
-            System.out.println("Messages in queue: " + StmikServiceApp.message_queue.size());
+            StmikServiceApp.message_queue.add(new String(data, "UTF-8"));
         }
         catch (UnsupportedEncodingException e){
-            System.out.println("Pong problem: " + e.getMessage());
+            put.error("Unsupported encoding for message is detected");
         }
     }
 

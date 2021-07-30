@@ -61,8 +61,11 @@ class StmikServiceApp implements Callable<Integer> {
         list.put("Connection fail", 73);
         EXIT_CODE = Collections.unmodifiableMap(list);
     }
-    private final static int CONNECTION_LIFE_CYCLE = 175_200;  // [hours], i.e. infinity
-    private final static int TERMINATION_DOWN_TIME = 2;   //[seconds]
+    private final static long CONNECTION_LIFE_CYCLE = 175_200;  // [hours], i.e. infinity
+    private final static long MESSAGE_PROCESSOR_START_DELAY = 5L; //[seconds]
+    
+    // TODO: make it a command line option
+    private final static long MESSAGE_PROCESSOR_PERIOD = 20L;     //[seconds]
     
     /* Command line options */
     @Spec CommandSpec spec; // injected by picocli
@@ -80,15 +83,15 @@ class StmikServiceApp implements Callable<Integer> {
             MIN_OBJECT_RESPOND_INTERVAL + " and less then " + MAX_OBJECT_RESPOND_INTERVAL + 
             ". Default value is " + DEF_OBJECT_RESPOND_INTERVAL + " seconds.")
     private static int OBJECT_RESPOND_INTERVAL;
-    private final static String ACQUISITION_QUERY = "{" + MessageFormat.format(
-        "\"kpd\" : \"All\", \"interval\" : {0}", OBJECT_RESPOND_INTERVAL
-    ) + "}";
-
+    private static String ACQUISITION_QUERY;  
+    
     /* Exploited objects */
     private final static Logger put = LoggerFactory.getLogger(StmikServiceApp.class);
-    private static WebsocketClient WsClient;
-    private static ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
-    public static ConcurrentLinkedQueue<Integer> message_queue = new ConcurrentLinkedQueue<Integer>();
+    private final static ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
+    private final static WebsocketClient WsClient = new WebsocketClient(STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT);
+
+    public final static ConcurrentLinkedQueue<String> message_queue = new ConcurrentLinkedQueue<String>();
+    
 
     @Override
     public Integer call() throws Exception {
@@ -98,8 +101,10 @@ class StmikServiceApp implements Callable<Integer> {
                 spec.commandLine(), 
                 MessageFormat.format("Error in option value: {0} is an invalid value of --interval option", OBJECT_RESPOND_INTERVAL)
             );
-        }    
-
+        } else {
+            ACQUISITION_QUERY = "{" + 
+                MessageFormat.format("\"kpd\" : \"All\", \"interval\" : {0}", OBJECT_RESPOND_INTERVAL) + "}";
+        }
         sun.misc.Signal.handle(new sun.misc.Signal("INT"),  signal -> {
             put.info("User interruption signal by Ctrl+C is recieved");
             put.info("Send stop signal to message processor");
@@ -111,14 +116,7 @@ class StmikServiceApp implements Callable<Integer> {
             }
             put.info("Remove web-socket listeners");
             WsClient.cleanEventListeners();
-            
-            put.info("Close web-socket in" + TERMINATION_DOWN_TIME +  "seconds. Wait...");
             WsClient.closeSocket();
-            try {
-                TimeUnit.SECONDS.sleep(TERMINATION_DOWN_TIME);
-            } catch (Exception e){
-                put.error("Main thread cannot be put on sleep.");
-            }
             put.info("Ready to terminate. Bye-bye!");
             System.exit(EXIT_CODE.get("User termination"));
         });
@@ -134,7 +132,7 @@ class StmikServiceApp implements Callable<Integer> {
 
         /* Initiate web-socket connection: */
         put.info(MessageFormat.format("Create web-socket client to <{0}:{1}>", STMIK_SERVER_ADDRESS, Long.toString(STMIK_SERVER_PORT)));
-        WsClient = new WebsocketClient(STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT);
+       
         WsClient.setSsl(true);
         WsClient.setSSLParams(
             CLIENT_CERTIFICATE_TYPE, SERVER_CERTIFICATE_TYPE, CLIENT_KEY_FILE_NAME_PATH,
@@ -148,13 +146,13 @@ class StmikServiceApp implements Callable<Integer> {
                     EXIT_CODE.get("Client fail")));
             return(EXIT_CODE.get("Client fail"));
         }    
-        put.info("Ok. Client is successfully created.");
+        put.info("Ok. Client is successfully created");
 
         put.info("Initiate message processor");
-        ScheduledFuture<?> scheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(
-            new MessageProcessor(), 5, 20, TimeUnit.SECONDS
+        ScheduledFuture<?> messageProccessorSchedule = scheduledExecutorService.scheduleWithFixedDelay(
+            new MessageProcessor(), MESSAGE_PROCESSOR_START_DELAY, MESSAGE_PROCESSOR_PERIOD, TimeUnit.SECONDS
         );
-        put.info("Message processors status is " + !scheduledFuture.isCancelled());
+        put.info("Message processors status is " + !messageProccessorSchedule.isCancelled());
 
         put.info(MessageFormat.format("Connect to <{0}:{1}>", STMIK_SERVER_ADDRESS, Long.toString(STMIK_SERVER_PORT)));
         WsClient.addClientSocketEventListener(new ClientEventListenerLogging());
@@ -171,6 +169,7 @@ class StmikServiceApp implements Callable<Integer> {
             )
         );   
         
+//        System.out.println(ACQUISITION_QUERY); 
         put.info(
             MessageFormat.format(
                 "Start sending and recieve messages sending acquisition query <{0}>", 
