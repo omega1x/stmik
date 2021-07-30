@@ -1,21 +1,22 @@
 package ru.sibgenco;
 
-import picocli.CommandLine;
-import picocli.CommandLine.Command;
-import picocli.CommandLine.Option;
-import picocli.CommandLine.Model.CommandSpec;
-import picocli.CommandLine.*;
-// import picocli.CommandLine.Parameters;
-
-import java.util.Map;
-import java.util.HashMap;
-import java.util.Collections;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.ConcurrentLinkedQueue;
 import java.io.File;
 import java.nio.file.Paths;
 import java.text.MessageFormat;
+
+import java.util.Collections;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Callable;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+
+import picocli.CommandLine;
+import picocli.CommandLine.Model.CommandSpec;
+import picocli.CommandLine.*;
 
 import org.apache.commons.io.FileUtils;
 import org.slf4j.Logger;
@@ -30,6 +31,7 @@ import fr.bmartel.protocol.websocket.client.WebsocketClient;
          exitCodeList = { // look further at EXIT_CODE field of this class
              " 0:Successful program execution.",
              " 1:Usage error: user input for the command was incorrect.",
+             "70:Program is terminated by user.",
              "71:Internal software error: an unexpected exception occurred.",
              "72:Internal software error: web-socket client cannot be created.",
              "73:Connection error: service unavailable."
@@ -53,12 +55,14 @@ class StmikServiceApp implements Callable<Integer> {
     static {
         Map<String, Integer> list = new HashMap<String, Integer>();
         list.put("All done, thanks!", 0);
+        list.put("User termination", 70);
         list.put("Unexpected exception", 71);
         list.put("Client fail", 72);
         list.put("Connection fail", 73);
         EXIT_CODE = Collections.unmodifiableMap(list);
     }
     private final static int CONNECTION_LIFE_CYCLE = 175_200;  // [hours], i.e. infinity
+    private final static int TERMINATION_DOWN_TIME = 2;   //[seconds]
     
     /* Command line options */
     @Spec CommandSpec spec; // injected by picocli
@@ -82,7 +86,8 @@ class StmikServiceApp implements Callable<Integer> {
 
     /* Exploited objects */
     private final static Logger put = LoggerFactory.getLogger(StmikServiceApp.class);
-    private static WebsocketClient Client;
+    private static WebsocketClient WsClient;
+    private static ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(1);
     public static ConcurrentLinkedQueue<Integer> message_queue = new ConcurrentLinkedQueue<Integer>();
 
     @Override
@@ -95,10 +100,32 @@ class StmikServiceApp implements Callable<Integer> {
             );
         }    
 
+        sun.misc.Signal.handle(new sun.misc.Signal("INT"),  signal -> {
+            put.info("User interruption signal by Ctrl+C is recieved");
+            put.info("Send stop signal to message processor");
+            scheduledExecutorService.shutdown();
+            if (scheduledExecutorService.isShutdown()) {
+                put.info("Message processor has been shutdown");
+            } else {
+                put.warn("Message processor has not been shutdown");
+            }
+            put.info("Remove web-socket listeners");
+            WsClient.cleanEventListeners();
+            
+            put.info("Close web-socket in" + TERMINATION_DOWN_TIME +  "seconds. Wait...");
+            WsClient.closeSocket();
+            try {
+                TimeUnit.SECONDS.sleep(TERMINATION_DOWN_TIME);
+            } catch (Exception e){
+                put.error("Main thread cannot be put on sleep.");
+            }
+            put.info("Ready to terminate. Bye-bye!");
+            System.exit(EXIT_CODE.get("User termination"));
+        });
+
         put.info("Start *stmik* service");
         /* Prepare server certificate: */
         put.info(MessageFormat.format("Extract server certificate <{0}>", SERVER_KEY_FILE_NAME));
-        // URL serverKeyResourcePath = StmikServiceApp.class.getResource("/" + SERVER_KEY_FILE_NAME);
         try {
           FileUtils.copyURLToFile(StmikServiceApp.class.getResource("/" + SERVER_KEY_FILE_NAME), new File(SERVER_KEY_FULL_PATH));
         } catch (Exception x) { x.printStackTrace(); }
@@ -107,14 +134,14 @@ class StmikServiceApp implements Callable<Integer> {
 
         /* Initiate web-socket connection: */
         put.info(MessageFormat.format("Create web-socket client to <{0}:{1}>", STMIK_SERVER_ADDRESS, Long.toString(STMIK_SERVER_PORT)));
-        Client = new WebsocketClient(STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT);
-        Client.setSsl(true);
-        Client.setSSLParams(
+        WsClient = new WebsocketClient(STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT);
+        WsClient.setSsl(true);
+        WsClient.setSSLParams(
             CLIENT_CERTIFICATE_TYPE, SERVER_CERTIFICATE_TYPE, CLIENT_KEY_FILE_NAME_PATH,
             SERVER_KEY_FULL_PATH, SSL_PROTOCOL_TYPE, CLIENT_KEY_PASSWORD, SERVER_KEY_PASSWORD
         );
 
-        if (Client == null){
+        if (WsClient == null){
             put.error(
                 MessageFormat.format(
                     "Fail to create web-socket client. Program is terminated with exit code {0}", 
@@ -122,10 +149,17 @@ class StmikServiceApp implements Callable<Integer> {
             return(EXIT_CODE.get("Client fail"));
         }    
         put.info("Ok. Client is successfully created.");
+
+        put.info("Initiate message processor");
+        ScheduledFuture<?> scheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(
+            new MessageProcessor(), 5, 20, TimeUnit.SECONDS
+        );
+        put.info("Message processors status is " + !scheduledFuture.isCancelled());
+
         put.info(MessageFormat.format("Connect to <{0}:{1}>", STMIK_SERVER_ADDRESS, Long.toString(STMIK_SERVER_PORT)));
-        Client.addClientSocketEventListener(new ClientEventListenerLogging());
-        Client.connect();
-        if (!Client.isConnected()) {
+        WsClient.addClientSocketEventListener(new ClientEventListenerLogging());
+        WsClient.connect();
+        if (!WsClient.isConnected()) {
             put.error(MessageFormat.format("Fail to connect to <{0}:{1}>. Program is terminated with exit code {2}",
             STMIK_SERVER_ADDRESS, STMIK_SERVER_PORT, EXIT_CODE.get("Connection fail")));
             return(EXIT_CODE.get("Connection fail"));
@@ -143,7 +177,7 @@ class StmikServiceApp implements Callable<Integer> {
                 ACQUISITION_QUERY
             )
         );
-        Client.writeMessage(ACQUISITION_QUERY);
+        WsClient.writeMessage(ACQUISITION_QUERY);
         try {
             TimeUnit.HOURS.sleep(CONNECTION_LIFE_CYCLE);
         } catch (Exception e){
@@ -151,8 +185,9 @@ class StmikServiceApp implements Callable<Integer> {
             return EXIT_CODE.get("Unexpected exception");
         }
 
+        // Practically unreachable code:
         put.info("Finish sending and recieve messages");
-        Client.cleanEventListeners();
+        WsClient.cleanEventListeners();
         
         put.info(
             MessageFormat.format(
@@ -166,6 +201,7 @@ class StmikServiceApp implements Callable<Integer> {
                 EXIT_CODE.get("All done, thanks!")
             )
         );
+
         return(EXIT_CODE.get("All done, thanks!"));   
     }
 

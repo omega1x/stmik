@@ -2,9 +2,6 @@ package ru.sibgenco;
 
 import fr.bmartel.protocol.websocket.client.IWebsocketClientChannel;
 import fr.bmartel.protocol.websocket.client.IWebsocketClientEventListener;
-// import org.apache.log4j.LogManager;
-// import org.apache.log4j.Logger;
-
 import java.io.UnsupportedEncodingException;
 
 //логирующий слушатель клиентов
@@ -28,6 +25,7 @@ public class ClientEventListenerLogging implements IWebsocketClientEventListener
     public void onIncomingMessageReceived(byte[] data, IWebsocketClientChannel iWebsocketClientChannel) {
         try {
             String a = "Pong: " + new String(data, "UTF-8");
+            a.isBlank();
             StmikServiceApp.message_queue.add(1);
             System.out.println("Messages in queue: " + StmikServiceApp.message_queue.size());
         }
