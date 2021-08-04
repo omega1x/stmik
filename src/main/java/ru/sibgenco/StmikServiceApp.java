@@ -24,7 +24,8 @@ import org.slf4j.LoggerFactory;
 
 import fr.bmartel.protocol.websocket.client.WebsocketClient;
 
-@Command(name = "stmik", mixinStandardHelpOptions = true, version = "stmik 1.0",
+
+@Command(name = "stmik", mixinStandardHelpOptions = true, version = "stmik 0.1",
          header = "@|bold Connect to|@ @|bold,fg(blue) BTSK|@ @|bold telemetry service through web-socket interface. |@%n", 
          footer = "%nData are received and transferred for unlimited period until the user will interrupt the process by @|underline,bold Ctrl+C|@.%n",
          exitCodeListHeading = "%nExit Codes:%n",
@@ -95,7 +96,7 @@ class StmikServiceApp implements Callable<Integer> {
 
     @Override
     public Integer call() throws Exception {
-        /* Custom validation of command line parameters */
+        /**  Custom validation of command line parameters */
         if (OBJECT_RESPOND_INTERVAL <= MIN_OBJECT_RESPOND_INTERVAL || OBJECT_RESPOND_INTERVAL >= MAX_OBJECT_RESPOND_INTERVAL) {
             throw new ParameterException(
                 spec.commandLine(), 
@@ -105,6 +106,8 @@ class StmikServiceApp implements Callable<Integer> {
             ACQUISITION_QUERY = "{" + 
                 MessageFormat.format("\"kpd\" : \"All\", \"interval\" : {0}", OBJECT_RESPOND_INTERVAL) + "}";
         }
+
+        /**  Process interruption action from user */
         sun.misc.Signal.handle(new sun.misc.Signal("INT"),  signal -> {
             put.info("User interruption signal by Ctrl+C is recieved");
             put.info("Send stop signal to message processor");
@@ -121,8 +124,10 @@ class StmikServiceApp implements Callable<Integer> {
             System.exit(EXIT_CODE.get("User termination"));
         });
 
+        /** Execute main thread */
         put.info("Start *stmik* service");
-        /* Prepare server certificate: */
+        
+        /**  Prepare server certificate: */
         put.info(MessageFormat.format("Extract server certificate <{0}>", SERVER_KEY_FILE_NAME));
         try {
           FileUtils.copyURLToFile(StmikServiceApp.class.getResource("/" + SERVER_KEY_FILE_NAME), new File(SERVER_KEY_FULL_PATH));
@@ -130,7 +135,7 @@ class StmikServiceApp implements Callable<Integer> {
         put.info(MessageFormat.format("Ok. Server certificate successfully extracted to <{0}>", SERVER_KEY_FULL_PATH));
         
 
-        /* Initiate web-socket connection: */
+        /** Initiate web-socket connection: */
         put.info(MessageFormat.format("Create web-socket client to <{0}:{1}>", STMIK_SERVER_ADDRESS, Long.toString(STMIK_SERVER_PORT)));
        
         WsClient.setSsl(true);
@@ -169,7 +174,6 @@ class StmikServiceApp implements Callable<Integer> {
             )
         );   
         
-//        System.out.println(ACQUISITION_QUERY); 
         put.info(
             MessageFormat.format(
                 "Start sending and recieve messages sending acquisition query <{0}>", 
@@ -184,7 +188,7 @@ class StmikServiceApp implements Callable<Integer> {
             return EXIT_CODE.get("Unexpected exception");
         }
 
-        // Practically unreachable code:
+        /** Finilize the thread (it is a practically unreachable code */
         put.info("Finish sending and recieve messages");
         WsClient.cleanEventListeners();
         

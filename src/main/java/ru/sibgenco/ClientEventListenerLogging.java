@@ -12,12 +12,12 @@ public class ClientEventListenerLogging implements IWebsocketClientEventListener
     private final static Logger put = LoggerFactory.getLogger(ClientEventListenerLogging.class);
     @Override
     public void onSocketConnected() {
-       put.info("Connection confirmed");
+       put.info("Web-socket. Connection is confirmed");
     }
 
     @Override
     public void onSocketClosed() {
-        put.info("Socket close confirmed");
+        put.info("Web-socket. Closing is confirmed");
     }
 
     @Override
@@ -26,7 +26,7 @@ public class ClientEventListenerLogging implements IWebsocketClientEventListener
             StmikServiceApp.message_queue.add(new String(data, "UTF-8"));
         }
         catch (UnsupportedEncodingException e){
-            put.error("Unsupported encoding for message is detected");
+            put.error("Web-socket. Unsupported encoding for message is detected");
         }
     }
 
