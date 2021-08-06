@@ -1,11 +1,6 @@
 package ru.sibgenco;
 
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
-import java.util.HashMap;
-import java.io.FileWriter;
-import java.io.IOException;
+import java.lang.Math;
 import java.text.MessageFormat;
 
 import org.slf4j.Logger;
@@ -13,16 +8,40 @@ import org.slf4j.LoggerFactory;
 
 import org.json.simple.JSONObject;
 import org.json.simple.parser.JSONParser;
+import org.json.simple.JSONArray;
 
 import java.sql.*;
 
 public class MessageProcessor implements Runnable {
+    public MessageProcessor(String chConnectionString){
+        this.chConnectionString = chConnectionString;
+    }
+    private String chConnectionString; //= ; 
+    // TODO: Add field descriptions in SQL-comments
+    private final static String TABLE_CREATION_QUERY =       
+        "CREATE TABLE IF NOT EXISTS stmik (                                                                               \n" +
+        "  timestamp  DateTime('Asia/Krasnoyarsk') NOT NULL, -- Epoch Unix timestamp (See https://www.unixtimestamp.com)  \n" +
+        "  id         INTEGER                      NOT NULL, -- District heating network id                               \n" +
+        "  TIT01      INTEGER                      NOT NULL, -- Temperature of the return heating water, [°C×100].        \n" +
+        "  TIT02      INTEGER                      NOT NULL,          \n" +
+        "  TIT03      INTEGER                      NOT NULL,          \n" +
+        "  TIT04      INTEGER                      NOT NULL,          \n" +
+        "  TIT05      INTEGER                      NOT NULL,          \n" +
+        "  TIT06      INTEGER                      NOT NULL,          \n" +
+        "  TIT07      INTEGER                      NOT NULL,          \n" +
+        "  TIT08      INTEGER                      NOT NULL,          \n" +
+        "  TIT09      INTEGER                      NOT NULL,          \n" +
+        "  TIT10      INTEGER                      NOT NULL,          \n" +
+        "  TIT11      INTEGER                      NOT NULL,          \n" +
+        "  PRIMARY KEY (timestamp, id)                                                                                    \n"+
+        ") ENGINE = MergeTree() ORDER BY (timestamp, id);                                                                       \n" ;
+
+
     private final static Logger put = LoggerFactory.getLogger(MessageProcessor.class);
     private final static JSONParser jsonParser = new JSONParser();
 
     public void run() {
-        
-        // Try to clear concurrent queue as faster as possible
+        /** First of all try to clear concurrent queue as faster as possible: */
         Object[] message_array = StmikServiceApp.message_queue.toArray();
         StmikServiceApp.message_queue.clear();
 
@@ -35,66 +54,56 @@ public class MessageProcessor implements Runnable {
             );
             return;  
         }
-        
-        
-        /** Parse JSON*/
-        Long kpd = 0L;
-        try {
-            JSONObject messageObj = (JSONObject) jsonParser.parse( message_array[0].toString() );
-            kpd = (Long) messageObj.get("kpd");
 
-        } catch(Exception e) {
-            e.printStackTrace();
-        }
-        System.out.println(kpd);
-        
-        
-        /** Write to target */
-        // Authorization: 
-        //> clickhouse-client --host=127.0.0.1 --port=9000 --database=default --user=default --password=poss
-
-        try (Connection connection = DriverManager.getConnection("jdbc:clickhouse://127.0.0.1:9000/default?user=default&password=poss")) {
+        /** Connect to backend */
+        try (Connection connection = DriverManager.getConnection(chConnectionString)) {
+            put.info(MessageFormat.format("JDBC connection. Connection to <{0}> is confirmed", chConnectionString));
             try (Statement stmt = connection.createStatement()) {
-                try (ResultSet rs = stmt.executeQuery("drop table if exists test_jdbc_example")) {
-                    System.out.println(rs.next());
-                } catch (Exception e) {e.printStackTrace();}
-                try (ResultSet rs = stmt.executeQuery("create table test_jdbc_example(day Date, name String, age UInt8) Engine=Log")) {
-                    System.out.println(rs.next());
-                } catch (Exception e) {e.printStackTrace();}
-                /*
-                try (PreparedStatement pstmt = connection.prepareStatement("INSERT INTO test_jdbc_example VALUES(?, ?, ?)")) {
-                    for (int i = 1; i <= 200; i++) {
-                        pstmt.setDate(1, new Date(System.currentTimeMillis()));
-                        if (i % 2 == 0)
-                            pstmt.setString(2, "Zhang San" + i);
-                        else
-                            pstmt.setString(2, "Zhang San");
-                        pstmt.setByte(3, (byte) ((i % 4) * 15));
-                        System.out.println(pstmt);
-                        pstmt.addBatch();
+                
+                /** Recreate table */
+                try (ResultSet rs = stmt.executeQuery(TABLE_CREATION_QUERY)) {} catch (Exception e) {
+                    put.error("JDBC connection. Cannot execute CREATE TABLE query. ");
+                    e.printStackTrace();
+                }
+
+                /** Insert data */
+                try (PreparedStatement pstmt = connection.prepareStatement("INSERT INTO stmik VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)")) {
+                    JSONObject messageObj;
+                    JSONArray tit;
+                    for (int j = 0; j < message_array.length; j++){
+                        try {
+                            /** Start message processing*/
+                            messageObj = (JSONObject) jsonParser.parse( message_array[j].toString() );                                           
+                         
+                            pstmt.setTimestamp(1, new Timestamp((Long) messageObj.get("timestamp")));                                    
+                            pstmt.setInt(2, (int)(long) messageObj.get("kpd"));
+                         
+                            /** Process TITs */
+                            tit = (JSONArray) messageObj.get("TIT");
+                            for (int i = 0; i < tit.size(); i++) {
+                               pstmt.setInt( 3 + i, (int) Math.round( ((Number) tit.get(i)).doubleValue() * 100 ) );
+                            }
+
+                            /** Finalize message processing*/
+                            pstmt.addBatch();
+                        } catch(Exception e) {
+                         put.error("Web-socket. Cannot parse JSON-message");
+                         e.printStackTrace();
+                        }
                     }
                     pstmt.executeBatch();
+                    put.info(MessageFormat.format("JDBC connection. Data insert is successful", chConnectionString));
+                } catch (Exception e) {
+                    put.error("JDBC connection. Cannot execute INSERT INTO query. ");
+                    e.printStackTrace();
                 }
-        
-                try (PreparedStatement pstmt = connection.prepareStatement("select count(*) from test_jdbc_example where age>? and age<=?")) {
-                    pstmt.setByte(1, (byte) 10);
-                    pstmt.setByte(2, (byte) 30);
-                    //System.out.println(pstmt);
-                }
-        
-                try (PreparedStatement pstmt = connection.prepareStatement("select count(*) from test_jdbc_example where name=?")) {
-                    pstmt.setString(1, "Zhang San");
-                   // printCount(pstmt);
-                }
-                //try (ResultSet rs = stmt.executeQuery("drop table test_jdbc_example")) {
-                //    System.out.println(rs.next());
-                //}
+                put.info(MessageFormat.format("JDBC connection. Finish sending querires to <{0}>", chConnectionString));
             }
-            */
         } catch (Exception e) {
+            put.error(MessageFormat.format("JDBC connection. Connection to <{0}> failed!", chConnectionString));
             e.printStackTrace();
         }   
-    }  catch (Exception e) { e.printStackTrace();}
+    }
 }
     
-}
+
