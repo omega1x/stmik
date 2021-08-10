@@ -64,11 +64,11 @@ class StmikServiceApp implements Callable<Integer> {
     }
     private final static long CONNECTION_LIFE_CYCLE = 175_200;  // [hours], i.e. infinity
     private final static long MESSAGE_PROCESSOR_START_DELAY = 5L; //[seconds]
+    private final static String CLICKHOUSE_TABLE_NAME = "stmik_messenger";  //Possibly, it should be a command line option
+
     
-    // TODO: make it a command line option
     private final static long MESSAGE_PROCESSOR_PERIOD = 20L;     //[seconds]
 
-    // TODO: make it a command line option
     // |> clickhouse-client --host=127.0.0.1 --port=9000 --user=default --password=default
     private final static String CLICKHOUSE_CONNECTION_STRING = "jdbc:clickhouse://127.0.0.1:9000/default?user=default&password=default";
     
@@ -160,7 +160,8 @@ class StmikServiceApp implements Callable<Integer> {
 
         put.info("Initiate message processor");
         ScheduledFuture<?> messageProccessorSchedule = scheduledExecutorService.scheduleWithFixedDelay(
-            new MessageProcessor(CLICKHOUSE_CONNECTION_STRING), MESSAGE_PROCESSOR_START_DELAY, MESSAGE_PROCESSOR_PERIOD, TimeUnit.SECONDS
+            new MessageProcessor(CLICKHOUSE_CONNECTION_STRING, CLICKHOUSE_TABLE_NAME), 
+            MESSAGE_PROCESSOR_START_DELAY, MESSAGE_PROCESSOR_PERIOD, TimeUnit.SECONDS
         );
         put.info("Message processors status is " + !messageProccessorSchedule.isCancelled());
 
