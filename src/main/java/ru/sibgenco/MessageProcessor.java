@@ -224,6 +224,7 @@ public class MessageProcessor implements Runnable {
         } catch (Exception e) {
             put.error(MessageFormat.format("JDBC connection. Connection to <{0}> failed!", chConnectionString));
             e.printStackTrace();
+            System.exit(73);
         }   
     }
 
