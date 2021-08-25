@@ -26,7 +26,7 @@ OpenJDK 64-Bit Server VM (build 16.0.1+9-Ubuntu-120.04, mixed mode, sharing)
 Download the latest release of the `stmik` *fat-jar*:
 
 ```sh
-wget https://github.com/omega1x/stmik/releases/download/0.9.0/
+wget https://github.com/omega1x/stmik/releases/download/0.9.0/stmik.jar
 ``` 
 
 > **NOTE!** In order to connect to *BTSK-telemetry service* you must have appropriate credentials: a [PKCS 12](https://en.wikipedia.org/wiki/PKCS_12) file and password.
